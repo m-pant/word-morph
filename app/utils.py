@@ -2,13 +2,96 @@
 Вспомогательные функции
 """
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
+import pymorphy2
 
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+
+# Глобальный экземпляр морфологического анализатора
+morph = pymorphy2.MorphAnalyzer()
+
+# Маппинг частей речи на коды pymorphy2
+POS_MAPPING = {
+    'noun': 'NOUN',        # существительное
+    'adjf': 'ADJF',        # прилагательное (полное)
+    'adjs': 'ADJS',        # прилагательное (краткое)
+    'verb': 'VERB',        # глагол (личная форма)
+    'infn': 'INFN',        # глагол (инфинитив)
+    'prtf': 'PRTF',        # причастие (полное)
+    'prts': 'PRTS',        # причастие (краткое)
+    'grnd': 'GRND',        # деепричастие
+    'numr': 'NUMR',        # числительное
+    'advb': 'ADVB',        # наречие
+    'npro': 'NPRO',        # местоимение-существительное
+    'pred': 'PRED',        # предикатив
+    'prep': 'PREP',        # предлог
+    'conj': 'CONJ',        # союз
+    'prcl': 'PRCL',        # частица
+    'intj': 'INTJ',        # междометие
+}
+
+# Упрощенные группы частей речи
+POS_GROUPS = {
+    'adjective': ['ADJF', 'ADJS'],                    # все прилагательные
+    'verb_all': ['VERB', 'INFN', 'PRTF', 'PRTS', 'GRND'],  # все глагольные формы
+    'participle': ['PRTF', 'PRTS'],                   # причастия
+}
+
+
+def get_word_pos(word: str) -> Optional[str]:
+    """
+    Определение части речи слова
+
+    Args:
+        word: Слово для анализа
+
+    Returns:
+        Код части речи (NOUN, VERB, и т.д.) или None
+    """
+    parsed = morph.parse(word.lower())
+    if parsed:
+        return parsed[0].tag.POS
+    return None
+
+
+def filter_words_by_pos(words: List[str], pos_filter: Optional[str]) -> List[str]:
+    """
+    Фильтрация слов по части речи
+
+    Args:
+        words: Список слов для фильтрации
+        pos_filter: Фильтр части речи (noun, verb, adjf, и т.д.) или None
+
+    Returns:
+        Отфильтрованный список слов
+    """
+    if not pos_filter or pos_filter == 'all':
+        return words
+
+    # Определяем целевые POS коды
+    target_pos_codes = []
+
+    # Проверяем, это группа или отдельная часть речи
+    if pos_filter in POS_GROUPS:
+        target_pos_codes = POS_GROUPS[pos_filter]
+    elif pos_filter in POS_MAPPING:
+        target_pos_codes = [POS_MAPPING[pos_filter]]
+    else:
+        # Если передан напрямую код pymorphy2 (например, NOUN)
+        target_pos_codes = [pos_filter.upper()]
+
+    # Фильтруем слова
+    filtered = []
+    for word in words:
+        word_pos = get_word_pos(word)
+        if word_pos in target_pos_codes:
+            filtered.append(word)
+
+    return filtered
 
 
 def validate_parameters(
@@ -17,7 +100,8 @@ def validate_parameters(
     skip_letters: int,
     letter_type: str,
     stride: int = 0,
-    similarity_threshold: float = 0.0
+    similarity_threshold: float = 0.0,
+    pos_filter: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Валидация параметров запроса
@@ -29,6 +113,7 @@ def validate_parameters(
         letter_type: Тип букв
         stride: Шаг выборки слов
         similarity_threshold: Порог схожести слов
+        pos_filter: Фильтр по части речи
 
     Returns:
         Словарь с результатом валидации
@@ -66,11 +151,20 @@ def validate_parameters(
             f"Параметр 'letter_type' должен быть одним из: {', '.join(valid_letter_types)}"
         )
 
+    # Проверка pos_filter
+    if pos_filter and pos_filter != 'all':
+        valid_pos = list(POS_MAPPING.keys()) + list(POS_GROUPS.keys()) + ['all']
+        if pos_filter not in valid_pos:
+            raise ValueError(
+                f"Параметр 'pos_filter' должен быть одним из: {', '.join(sorted(valid_pos))}"
+            )
+
     return {
         'word': word.strip(),
         'count': count,
         'skip_letters': skip_letters,
         'letter_type': letter_type,
         'stride': stride,
-        'similarity_threshold': similarity_threshold
+        'similarity_threshold': similarity_threshold,
+        'pos_filter': pos_filter
     }

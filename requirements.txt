@@ -3,3 +3,5 @@ uvicorn[standard]==0.24.0
 navec==0.10.0
 numpy==1.24.3
 pydantic==2.5.0
+pymorphy2==0.9.1
+pymorphy2-dicts-ru==2.4.417127.4579844

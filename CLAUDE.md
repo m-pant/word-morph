@@ -45,6 +45,20 @@ curl -G "http://localhost:8081/api/words" \
   --data-urlencode "word=мебель" \
   --data-urlencode "count=5"
 
+# Filter by part of speech (POS)
+curl -G "http://localhost:8081/api/words" \
+  --data-urlencode "word=красный" \
+  --data-urlencode "count=5" \
+  --data-urlencode "pos_filter=adjective"
+
+# Only nouns
+curl -G "http://localhost:8081/api/words" \
+  --data-urlencode "word=стул" \
+  --data-urlencode "count=10" \
+  --data-urlencode "pos_filter=noun" \
+  --data-urlencode "stride=14" \
+  --data-urlencode "similarity_threshold=0.6"
+
 # With transformations
 curl -G "http://localhost:8081/api/words" \
   --data-urlencode "word=гроза" \
@@ -78,37 +92,76 @@ curl -G "http://localhost:8081/api/words" \
 - Transformations applied in order: shuffle → skip → errors
 
 **app/main.py** - FastAPI application
-- Single endpoint: `GET /api/words` with 12 query parameters
+- Single endpoint: `GET /api/words` with 13 query parameters (including pos_filter)
 - Lifespan context manager ensures model is loaded before accepting requests
 - Error handling: 400 (invalid params), 404 (word not in vocab), 500 (internal)
 - Pydantic models for request validation and response serialization
+- POS filtering: searches 5x count, filters by part of speech, then truncates to requested count
 
-**app/utils.py** - Parameter validation and logging setup
+**app/utils.py** - Parameter validation, logging setup, and POS filtering
+- `pymorphy2.MorphAnalyzer` singleton for Russian morphological analysis
+- `POS_MAPPING`: maps user-friendly names (noun, verb, adjective) to pymorphy2 codes
+- `POS_GROUPS`: convenient groupings (adjective = ADJF+ADJS, verb_all = VERB+INFN+PRTF+PRTS+GRND)
+- `filter_words_by_pos()`: filters word list by part of speech using morphological analysis
+- `get_word_pos()`: returns pymorphy2 POS tag for a word
 
 ### Request Flow
 
 1. FastAPI receives request at `/api/words`
-2. `validate_parameters()` validates all inputs
-3. `embeddings_service.find_similar_words()` returns top N semantically similar words (or random words)
+2. `validate_parameters()` validates all inputs (including pos_filter)
+3. If `pos_filter` is set, search count is multiplied by 5 to compensate for filtering
+4. `embeddings_service.find_similar_words()` returns top N semantically similar words (or random words)
    - Computes cosine similarity for entire vocabulary
    - Sorts by similarity score
    - Applies stride and similarity_threshold filtering
-4. `apply_transformations()` modifies words based on flags
-5. Returns JSON with query echo and transformed results
+5. If `pos_filter` is set, `filter_words_by_pos()` analyzes and filters words by part of speech
+6. Results are truncated to requested count
+7. `apply_transformations()` modifies words based on flags
+8. Returns JSON with query echo and transformed results
 
 ### Important Implementation Details
 
 - **Navec Model**: Downloaded to `navec_hudlit_v1_12B_500K_300d_100q.tar` on first run, cached in Docker volume at `/root/.navec`
-- **Singleton Pattern**: `embeddings_service` is a global instance to avoid reloading model
+- **pymorphy2**: Russian morphological analyzer loaded as singleton; dictionary includes ~5M word forms
+- **Singleton Pattern**: `embeddings_service` and `morph` analyzer are global instances to avoid reloading
 - **Cyrillic Handling**: Words are lowercased for lookup; API requires URL-encoded Cyrillic in requests
 - **Stride Logic**: When stride > 0, samples every (stride+1)th word from sorted similarity list, then backfills if needed
 - **Similarity Filtering**: Uses Jaccard similarity (intersection/union of character sets) to filter lexically similar words
+- **POS Filter Multiplier**: Searches 5x the requested count when POS filter is active, to ensure enough results after filtering
 
 ## Configuration
 
 - **PORT**: Environment variable, defaults to 8081 (external) / 8080 (internal container port)
 - **Logging**: Configured in app/utils.py at INFO level with timestamp format
 - **Limits**: max count=100, max skip_letters=word length, similarity_threshold 0.0-1.0
+
+## Part of Speech (POS) Filtering
+
+### Available POS Filters
+
+**Individual parts of speech:**
+- `noun` - существительное
+- `adjf` - прилагательное полное
+- `adjs` - прилагательное краткое
+- `verb` - глагол личная форма
+- `infn` - глагол инфинитив
+- `prtf` - причастие полное
+- `prts` - причастие краткое
+- `grnd` - деепричастие
+- `numr` - числительное
+- `advb` - наречие
+- `npro` - местоимение-существительное
+- `pred` - предикатив
+- `prep` - предлог
+- `conj` - союз
+- `prcl` - частица
+- `intj` - междометие
+
+**Convenient groups:**
+- `adjective` - все прилагательные (ADJF + ADJS)
+- `verb_all` - все глагольные формы (VERB + INFN + PRTF + PRTS + GRND)
+- `participle` - причастия (PRTF + PRTS)
+- `all` - без фильтрации (по умолчанию)
 
 ## API Interactive Docs
 
