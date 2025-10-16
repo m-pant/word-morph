@@ -42,6 +42,22 @@ POS_GROUPS = {
 }
 
 
+def normalize_word(word: str) -> str:
+    """
+    Приведение слова к начальной форме (именительный падеж единственного числа)
+
+    Args:
+        word: Слово для нормализации
+
+    Returns:
+        Нормализованное слово
+    """
+    parsed = morph.parse(word.lower())
+    if parsed:
+        return parsed[0].normal_form
+    return word.lower()
+
+
 def get_word_pos(word: str) -> Optional[str]:
     """
     Определение части речи слова

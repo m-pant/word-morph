@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from app.embeddings import embeddings_service
 from app.transformations import apply_transformations
-from app.utils import validate_parameters, filter_words_by_pos
+from app.utils import validate_parameters, filter_words_by_pos, normalize_word
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,7 @@ class QueryInfo(BaseModel):
     random_mode: bool = Field(default=False)
     similarity_threshold: float = Field(default=0.0)
     pos_filter: Optional[str] = Field(default=None)
+    normalize: bool = Field(default=False)
     transformations: TransformationsInfo
 
 
@@ -94,6 +95,7 @@ async def get_similar_words(
     random_mode: bool = Query(False, description="Вернуть случайные слова вместо семантически близких"),
     similarity_threshold: float = Query(0.0, ge=0.0, le=1.0, description="Порог текстовой схожести слов (0.0-1.0)"),
     pos_filter: Optional[str] = Query(None, description="Фильтр по части речи (noun, verb, adjective, и т.д.)"),
+    normalize: bool = Query(False, description="Привести слова к начальной форме (именительный падеж ед.ч.)"),
     shuffle_letters: bool = Query(False, description="Перестановка букв в словах"),
     skip_letters: int = Query(0, ge=0, description="Количество букв для пропуска"),
     show_skipped: bool = Query(False, description="Показывать пропущенные буквы как _"),
@@ -112,6 +114,7 @@ async def get_similar_words(
         random_mode: Вернуть случайные слова вместо семантически близких
         similarity_threshold: Порог текстовой схожести для фильтрации (0.0-1.0)
         pos_filter: Фильтр по части речи (noun, verb, adjective, и т.д.)
+        normalize: Привести слова к начальной форме (именительный падеж ед.ч.)
         shuffle_letters: Перестановка букв в словах
         skip_letters: Количество букв для пропуска
         show_skipped: Показывать пропущенные буквы как _
@@ -133,8 +136,12 @@ async def get_similar_words(
         )
 
         # Поиск семантически близких слов или случайных слов
-        # Увеличиваем count для компенсации фильтрации по POS
-        search_count = validated['count'] * 5 if pos_filter and pos_filter != 'all' else validated['count']
+        # Увеличиваем count для компенсации фильтрации по POS и дубликатов при нормализации
+        search_count = validated['count']
+        if pos_filter and pos_filter != 'all':
+            search_count *= 5
+        if normalize:
+            search_count *= 3  # Компенсация за дубликаты после нормализации
 
         similar_words_with_scores = embeddings_service.find_similar_words(
             validated['word'],
@@ -146,6 +153,18 @@ async def get_similar_words(
 
         # Извлекаем только слова (без оценок сходства)
         similar_words = [word for word, score in similar_words_with_scores]
+
+        # Применяем нормализацию (приведение к начальной форме)
+        if normalize:
+            similar_words = [normalize_word(word) for word in similar_words]
+            # Удаляем дубликаты после нормализации, сохраняя порядок
+            seen = set()
+            unique_words = []
+            for word in similar_words:
+                if word not in seen:
+                    seen.add(word)
+                    unique_words.append(word)
+            similar_words = unique_words
 
         # Применяем фильтрацию по части речи
         if pos_filter and pos_filter != 'all':
@@ -174,6 +193,7 @@ async def get_similar_words(
                 random_mode=random_mode,
                 similarity_threshold=validated['similarity_threshold'],
                 pos_filter=pos_filter,
+                normalize=normalize,
                 transformations=TransformationsInfo(
                     shuffle_letters=shuffle_letters,
                     skip_letters=skip_letters,

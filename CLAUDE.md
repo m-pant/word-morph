@@ -59,6 +59,13 @@ curl -G "http://localhost:8081/api/words" \
   --data-urlencode "stride=14" \
   --data-urlencode "similarity_threshold=0.6"
 
+# Normalize to base form (nominative singular)
+curl -G "http://localhost:8081/api/words" \
+  --data-urlencode "word=стул" \
+  --data-urlencode "count=10" \
+  --data-urlencode "pos_filter=noun" \
+  --data-urlencode "normalize=true"
+
 # With transformations
 curl -G "http://localhost:8081/api/words" \
   --data-urlencode "word=гроза" \
@@ -92,16 +99,18 @@ curl -G "http://localhost:8081/api/words" \
 - Transformations applied in order: shuffle → skip → errors
 
 **app/main.py** - FastAPI application
-- Single endpoint: `GET /api/words` with 13 query parameters (including pos_filter)
+- Single endpoint: `GET /api/words` with 14 query parameters (including pos_filter and normalize)
 - Lifespan context manager ensures model is loaded before accepting requests
 - Error handling: 400 (invalid params), 404 (word not in vocab), 500 (internal)
 - Pydantic models for request validation and response serialization
 - POS filtering: searches 5x count, filters by part of speech, then truncates to requested count
+- Normalization: converts words to base form (именительный падеж единственного числа) using pymorphy2
 
-**app/utils.py** - Parameter validation, logging setup, and POS filtering
+**app/utils.py** - Parameter validation, logging setup, POS filtering, and normalization
 - `pymorphy2.MorphAnalyzer` singleton for Russian morphological analysis
 - `POS_MAPPING`: maps user-friendly names (noun, verb, adjective) to pymorphy2 codes
 - `POS_GROUPS`: convenient groupings (adjective = ADJF+ADJS, verb_all = VERB+INFN+PRTF+PRTS+GRND)
+- `normalize_word()`: converts word to normal form (nominative singular for nouns)
 - `filter_words_by_pos()`: filters word list by part of speech using morphological analysis
 - `get_word_pos()`: returns pymorphy2 POS tag for a word
 
@@ -109,15 +118,20 @@ curl -G "http://localhost:8081/api/words" \
 
 1. FastAPI receives request at `/api/words`
 2. `validate_parameters()` validates all inputs (including pos_filter)
-3. If `pos_filter` is set, search count is multiplied by 5 to compensate for filtering
+3. Search count is increased to compensate for filtering:
+   - If `pos_filter` is set: multiply by 5
+   - If `normalize` is set: multiply by 3 (compensates for duplicates after normalization)
 4. `embeddings_service.find_similar_words()` returns top N semantically similar words (or random words)
    - Computes cosine similarity for entire vocabulary
    - Sorts by similarity score
    - Applies stride and similarity_threshold filtering
-5. If `pos_filter` is set, `filter_words_by_pos()` analyzes and filters words by part of speech
-6. Results are truncated to requested count
-7. `apply_transformations()` modifies words based on flags
-8. Returns JSON with query echo and transformed results
+5. If `normalize` is set:
+   - `normalize_word()` converts each word to its base form (именительный падеж единственного числа)
+   - Duplicates are removed while preserving order (e.g., "стула", "столу" → "стол")
+6. If `pos_filter` is set, `filter_words_by_pos()` analyzes and filters words by part of speech
+7. Results are truncated to requested count
+8. `apply_transformations()` modifies words based on flags
+9. Returns JSON with query echo and transformed results
 
 ### Important Implementation Details
 
@@ -128,6 +142,8 @@ curl -G "http://localhost:8081/api/words" \
 - **Stride Logic**: When stride > 0, samples every (stride+1)th word from sorted similarity list, then backfills if needed
 - **Similarity Filtering**: Uses Jaccard similarity (intersection/union of character sets) to filter lexically similar words
 - **POS Filter Multiplier**: Searches 5x the requested count when POS filter is active, to ensure enough results after filtering
+- **Normalize Multiplier**: Searches 3x the requested count when normalize is enabled, to compensate for duplicates removed after lemmatization
+- **Duplicate Removal**: When normalize=true, duplicates are removed while preserving order (first occurrence kept)
 
 ## Configuration
 
