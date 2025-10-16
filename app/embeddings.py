@@ -3,6 +3,7 @@
 """
 import logging
 import os
+import random
 from typing import List, Optional, Tuple
 import numpy as np
 from navec import Navec
@@ -67,13 +68,23 @@ class EmbeddingsService:
 
         return self.model[word_lower]
 
-    def find_similar_words(self, word: str, count: int = 10) -> List[Tuple[str, float]]:
+    def find_similar_words(
+        self,
+        word: str,
+        count: int = 10,
+        stride: int = 0,
+        random_mode: bool = False,
+        similarity_threshold: float = 0.0
+    ) -> List[Tuple[str, float]]:
         """
         Поиск семантически близких слов
 
         Args:
             word: Исходное слово
             count: Количество слов для возврата
+            stride: Шаг выборки (0 = последовательно, 1 = через одно, и т.д.)
+            random_mode: Если True, возвращает случайные слова из словаря
+            similarity_threshold: Порог схожести слов (0.0-1.0). Слова с similarity >= threshold будут отфильтрованы
 
         Returns:
             Список кортежей (слово, сходство)
@@ -83,6 +94,10 @@ class EmbeddingsService:
         """
         if self.model is None:
             raise RuntimeError("Модель не загружена")
+
+        # Режим случайных слов
+        if random_mode:
+            return self._get_random_words(count)
 
         # Получаем эмбеддинг исходного слова
         word_embedding = self.get_embedding(word)
@@ -103,10 +118,140 @@ class EmbeddingsService:
             similarity = self._cosine_similarity(word_embedding, vocab_embedding)
             similarities.append((vocab_word, similarity))
 
-        # Сортируем по убыванию сходства и берем топ-N
+        # Сортируем по убыванию сходства
         similarities.sort(key=lambda x: x[1], reverse=True)
 
-        return similarities[:count]
+        # Применяем stride и фильтрацию похожих слов
+        result = self._apply_stride_and_filter(
+            similarities,
+            count,
+            stride,
+            similarity_threshold
+        )
+
+        return result
+
+    def _get_random_words(self, count: int) -> List[Tuple[str, float]]:
+        """
+        Получение случайных слов из словаря
+
+        Args:
+            count: Количество слов
+
+        Returns:
+            Список кортежей (слово, 0.0)
+        """
+        if self.model is None:
+            raise RuntimeError("Модель не загружена")
+
+        all_words = list(self.model.vocab.words)
+        selected_words = random.sample(all_words, min(count, len(all_words)))
+
+        return [(word, 0.0) for word in selected_words]
+
+    def _apply_stride_and_filter(
+        self,
+        similarities: List[Tuple[str, float]],
+        count: int,
+        stride: int,
+        similarity_threshold: float
+    ) -> List[Tuple[str, float]]:
+        """
+        Применение stride и фильтрации похожих слов
+
+        Args:
+            similarities: Отсортированный список (слово, сходство)
+            count: Требуемое количество слов
+            stride: Шаг выборки
+            similarity_threshold: Порог схожести слов (доля совпадающих символов)
+
+        Returns:
+            Отфильтрованный список
+        """
+        result = []
+        index = 0
+        step = stride + 1  # Шаг 0 означает каждое слово, 1 - через одно и т.д.
+
+        while len(result) < count and index < len(similarities):
+            candidate_word, score = similarities[index]
+
+            # Проверяем на схожесть с уже выбранными словами
+            if self._is_word_acceptable(candidate_word, result, similarity_threshold):
+                result.append((candidate_word, score))
+
+            index += step
+
+        # Если не хватило слов с учетом stride, добираем оставшиеся
+        if len(result) < count:
+            for i in range(len(similarities)):
+                if len(result) >= count:
+                    break
+
+                candidate_word, score = similarities[i]
+
+                # Пропускаем уже добавленные слова
+                if any(candidate_word == w for w, _ in result):
+                    continue
+
+                # Проверяем на схожесть
+                if self._is_word_acceptable(candidate_word, result, similarity_threshold):
+                    result.append((candidate_word, score))
+
+        return result[:count]
+
+    def _is_word_acceptable(
+        self,
+        candidate: str,
+        selected_words: List[Tuple[str, float]],
+        threshold: float
+    ) -> bool:
+        """
+        Проверка, приемлемо ли слово (не слишком похоже на уже выбранные)
+
+        Args:
+            candidate: Кандидат на добавление
+            selected_words: Уже выбранные слова
+            threshold: Порог схожести (0.0-1.0)
+
+        Returns:
+            True, если слово можно добавить
+        """
+        if threshold <= 0.0:
+            return True
+
+        for selected_word, _ in selected_words:
+            similarity = self._calculate_string_similarity(candidate, selected_word)
+            if similarity >= threshold:
+                return False
+
+        return True
+
+    @staticmethod
+    def _calculate_string_similarity(word1: str, word2: str) -> float:
+        """
+        Вычисление текстовой схожести слов (доля совпадающих символов)
+
+        Args:
+            word1: Первое слово
+            word2: Второе слово
+
+        Returns:
+            Значение от 0.0 до 1.0
+        """
+        if not word1 or not word2:
+            return 0.0
+
+        # Считаем общие символы
+        set1 = set(word1.lower())
+        set2 = set(word2.lower())
+
+        intersection = len(set1 & set2)
+        union = len(set1 | set2)
+
+        if union == 0:
+            return 0.0
+
+        return intersection / union
 
     @staticmethod
     def _cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:

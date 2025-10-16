@@ -32,6 +32,9 @@ class QueryInfo(BaseModel):
     """Информация о запросе"""
     word: str
     count: int
+    stride: int = Field(default=0)
+    random_mode: bool = Field(default=False)
+    similarity_threshold: float = Field(default=0.0)
     transformations: TransformationsInfo
 
 
@@ -86,6 +89,9 @@ async def health_check():
 async def get_similar_words(
     word: str = Query(..., description="Исходное слово для поиска"),
     count: int = Query(10, ge=1, le=100, description="Количество возвращаемых слов"),
+    stride: int = Query(0, ge=0, description="Шаг выборки слов (0=последовательно, 1=через одно)"),
+    random_mode: bool = Query(False, description="Вернуть случайные слова вместо семантически близких"),
+    similarity_threshold: float = Query(0.0, ge=0.0, le=1.0, description="Порог текстовой схожести слов (0.0-1.0)"),
     shuffle_letters: bool = Query(False, description="Перестановка букв в словах"),
     skip_letters: int = Query(0, ge=0, description="Количество букв для пропуска"),
     show_skipped: bool = Query(False, description="Показывать пропущенные буквы как _"),
@@ -100,6 +106,9 @@ async def get_similar_words(
     Args:
         word: Исходное слово для поиска
         count: Количество возвращаемых слов (по умолчанию: 10)
+        stride: Шаг выборки (0=последовательно, 1=через одно, и т.д.)
+        random_mode: Вернуть случайные слова вместо семантически близких
+        similarity_threshold: Порог текстовой схожести для фильтрации (0.0-1.0)
         shuffle_letters: Перестановка букв в словах
         skip_letters: Количество букв для пропуска
         show_skipped: Показывать пропущенные буквы как _
@@ -116,12 +125,17 @@ async def get_similar_words(
     """
     try:
         # Валидация параметров
-        validated = validate_parameters(word, count, skip_letters, letter_type)
+        validated = validate_parameters(
+            word, count, skip_letters, letter_type, stride, similarity_threshold
+        )
 
-        # Поиск семантически близких слов
+        # Поиск семантически близких слов или случайных слов
         similar_words_with_scores = embeddings_service.find_similar_words(
             validated['word'],
-            validated['count']
+            validated['count'],
+            stride=validated['stride'],
+            random_mode=random_mode,
+            similarity_threshold=validated['similarity_threshold']
         )
 
         # Извлекаем только слова (без оценок сходства)
@@ -144,6 +158,9 @@ async def get_similar_words(
             query=QueryInfo(
                 word=validated['word'],
                 count=validated['count'],
+                stride=validated['stride'],
+                random_mode=random_mode,
+                similarity_threshold=validated['similarity_threshold'],
                 transformations=TransformationsInfo(
                     shuffle_letters=shuffle_letters,
                     skip_letters=skip_letters,
