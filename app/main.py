@@ -40,11 +40,18 @@ class QueryInfo(BaseModel):
     transformations: TransformationsInfo
 
 
+class WordResult(BaseModel):
+    """Результат с исходным и трансформированным словом"""
+    original: str = Field(description="Исходное слово")
+    transformed: str = Field(description="Трансформированное слово")
+
+
 class SuccessResponse(BaseModel):
     """Успешный ответ"""
     status: str = Field(default='success')
     query: QueryInfo
     results: list[str]
+    sources: Optional[list[WordResult]] = Field(default=None, description="Пары исходных и трансформированных слов")
 
 
 class ErrorResponse(BaseModel):
@@ -96,6 +103,7 @@ async def get_similar_words(
     similarity_threshold: float = Query(0.0, ge=0.0, le=1.0, description="Порог текстовой схожести слов (0.0-1.0)"),
     pos_filter: Optional[str] = Query(None, description="Фильтр по части речи (noun, verb, adjective, и т.д.)"),
     normalize: bool = Query(False, description="Привести слова к начальной форме (именительный падеж ед.ч.)"),
+    return_source: bool = Query(False, description="Возвращать исходные слова вместе с трансформированными"),
     shuffle_letters: bool = Query(False, description="Перестановка букв в словах"),
     skip_letters: int = Query(0, ge=0, description="Количество букв для пропуска"),
     show_skipped: bool = Query(False, description="Показывать пропущенные буквы как _"),
@@ -115,6 +123,7 @@ async def get_similar_words(
         similarity_threshold: Порог текстовой схожести для фильтрации (0.0-1.0)
         pos_filter: Фильтр по части речи (noun, verb, adjective, и т.д.)
         normalize: Привести слова к начальной форме (именительный падеж ед.ч.)
+        return_source: Возвращать исходные слова вместе с трансформированными
         shuffle_letters: Перестановка букв в словах
         skip_letters: Количество букв для пропуска
         show_skipped: Показывать пропущенные буквы как _
@@ -172,6 +181,9 @@ async def get_similar_words(
             # Ограничиваем до нужного количества после фильтрации
             similar_words = similar_words[:validated['count']]
 
+        # Сохраняем исходные слова перед трансформацией (если нужно)
+        original_words = similar_words.copy() if return_source else None
+
         # Применяем трансформации
         transformed_words = apply_transformations(
             words=similar_words,
@@ -183,6 +195,14 @@ async def get_similar_words(
             preserve_first=preserve_first,
             preserve_last=preserve_last
         )
+
+        # Создаем пары исходных и трансформированных слов (если запрошено)
+        word_pairs = None
+        if return_source:
+            word_pairs = [
+                WordResult(original=orig, transformed=trans)
+                for orig, trans in zip(original_words, transformed_words)
+            ]
 
         # Формируем ответ
         response = SuccessResponse(
@@ -204,7 +224,8 @@ async def get_similar_words(
                     preserve_last=preserve_last
                 )
             ),
-            results=transformed_words
+            results=transformed_words,
+            sources=word_pairs
         )
 
         return response

@@ -32,6 +32,7 @@ class SearchRequest(BaseModel):
     count: Optional[int] = Field(10, ge=1, le=100, description="Number of words to return")
     pos_filter: Optional[str] = Field(None, description="Filter by part of speech (noun, verb, adjective, etc.)")
     normalize: Optional[bool] = Field(False, description="Convert words to base form")
+    return_source: Optional[bool] = Field(False, description="Return original words with transformed ones")
     stride: Optional[int] = Field(0, ge=0, description="Step for sampling words")
     similarity_threshold: Optional[float] = Field(0.0, ge=0.0, le=1.0, description="Jaccard similarity threshold")
     random_mode: Optional[bool] = Field(False, description="Return random words")
@@ -333,7 +334,8 @@ Features:
 Examples:
 - Find 5 similar nouns: word="дом", count=5, pos_filter="noun"
 - Find normalized adjectives: word="красный", pos_filter="adjective", normalize=true
-- Find words with transformations: word="гроза", shuffle_letters=true, preserve_first=true""",
+- Find words with transformations: word="гроза", shuffle_letters=true, preserve_first=true
+- Return original words with transformations: word="гроза", shuffle_letters=true, return_source=true""",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -360,6 +362,11 @@ Examples:
                         "normalize": {
                             "type": "boolean",
                             "description": "Convert words to base form",
+                            "default": False
+                        },
+                        "return_source": {
+                            "type": "boolean",
+                            "description": "Return original words with transformed ones",
                             "default": False
                         },
                         "stride": {
@@ -444,10 +451,17 @@ async def call_tool(tool_call: MCPToolCall):
             # Format response
             query_info = data.get('query', {})
             results = data.get('results', [])
+            sources = data.get('sources')
 
             # Build detailed response
             result_text = f"✓ Found {len(results)} words for '{query_info.get('word', tool_call.arguments.get('word'))}':\n\n"
             result_text += ", ".join(results)
+
+            # Add original words if return_source was used
+            if sources:
+                result_text += "\n\n📝 Original → Transformed:\n"
+                for pair in sources:
+                    result_text += f"  {pair['original']} → {pair['transformed']}\n"
 
             # Add query details if filters/transformations were applied
             details = []
@@ -481,6 +495,7 @@ async def call_tool(tool_call: MCPToolCall):
                     }
                 ],
                 "results": results,
+                "sources": sources,
                 "query": query_info
             }
 

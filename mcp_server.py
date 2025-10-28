@@ -40,7 +40,8 @@ Features:
 Examples:
 - Find 5 similar nouns: word="дом", count=5, pos_filter="noun"
 - Find normalized adjectives: word="красный", pos_filter="adjective", normalize=true
-- Find words with transformations: word="гроза", shuffle_letters=true, preserve_first=true""",
+- Find words with transformations: word="гроза", shuffle_letters=true, preserve_first=true
+- Return original words with transformations: word="гроза", shuffle_letters=true, return_source=true""",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -73,6 +74,11 @@ Examples:
                     "normalize": {
                         "type": "boolean",
                         "description": "Convert words to base form (nominative singular for nouns, masculine nominative for adjectives, infinitive for verbs). Automatically removes duplicates.",
+                        "default": False
+                    },
+                    "return_source": {
+                        "type": "boolean",
+                        "description": "Return original words along with transformed ones. Adds 'sources' field with {original, transformed} pairs.",
                         "default": False
                     },
                     "stride": {
@@ -156,10 +162,17 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             # Format response
             query_info = data.get('query', {})
             results = data.get('results', [])
+            sources = data.get('sources')
 
             # Build detailed response
             result_text = f"✓ Found {len(results)} words for '{query_info.get('word', arguments.get('word'))}':\n\n"
             result_text += ", ".join(results)
+
+            # Add original words if return_source was used
+            if sources:
+                result_text += "\n\n📝 Original → Transformed:\n"
+                for pair in sources:
+                    result_text += f"  {pair['original']} → {pair['transformed']}\n"
 
             # Add query details if filters/transformations were applied
             details = []

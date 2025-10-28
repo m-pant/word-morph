@@ -72,6 +72,13 @@ curl -G "http://localhost:8081/api/words" \
   --data-urlencode "count=5" \
   --data-urlencode "shuffle_letters=true" \
   --data-urlencode "preserve_first=true"
+
+# Return original words with transformations
+curl -G "http://localhost:8081/api/words" \
+  --data-urlencode "word=гроза" \
+  --data-urlencode "count=5" \
+  --data-urlencode "shuffle_letters=true" \
+  --data-urlencode "return_source=true"
 ```
 
 ## Architecture
@@ -99,12 +106,13 @@ curl -G "http://localhost:8081/api/words" \
 - Transformations applied in order: shuffle → skip → errors
 
 **app/main.py** - FastAPI application
-- Single endpoint: `GET /api/words` with 14 query parameters (including pos_filter and normalize)
+- Single endpoint: `GET /api/words` with 15 query parameters (including pos_filter, normalize, and return_source)
 - Lifespan context manager ensures model is loaded before accepting requests
 - Error handling: 400 (invalid params), 404 (word not in vocab), 500 (internal)
 - Pydantic models for request validation and response serialization
 - POS filtering: searches 5x count, filters by part of speech, then truncates to requested count
 - Normalization: converts words to base form (именительный падеж единственного числа) using pymorphy2
+- Return source: when `return_source=true`, includes `sources` field with original/transformed word pairs
 
 **app/utils.py** - Parameter validation, logging setup, POS filtering, and normalization
 - `pymorphy2.MorphAnalyzer` singleton for Russian morphological analysis
@@ -130,8 +138,10 @@ curl -G "http://localhost:8081/api/words" \
    - Duplicates are removed while preserving order (e.g., "стула", "столу" → "стол")
 6. If `pos_filter` is set, `filter_words_by_pos()` analyzes and filters words by part of speech
 7. Results are truncated to requested count
-8. `apply_transformations()` modifies words based on flags
-9. Returns JSON with query echo and transformed results
+8. If `return_source` is set, original words are saved before transformation
+9. `apply_transformations()` modifies words based on flags
+10. If `return_source=true`, response includes `sources` field with list of {original, transformed} pairs
+11. Returns JSON with query echo, transformed results, and optionally sources
 
 ### Important Implementation Details
 
@@ -144,6 +154,7 @@ curl -G "http://localhost:8081/api/words" \
 - **POS Filter Multiplier**: Searches 5x the requested count when POS filter is active, to ensure enough results after filtering
 - **Normalize Multiplier**: Searches 3x the requested count when normalize is enabled, to compensate for duplicates removed after lemmatization
 - **Duplicate Removal**: When normalize=true, duplicates are removed while preserving order (first occurrence kept)
+- **Return Source**: When return_source=true, original words are copied before transformations and returned as {original, transformed} pairs in `sources` field
 
 ## Configuration
 
