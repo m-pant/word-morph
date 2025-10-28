@@ -20,6 +20,8 @@ class EmbeddingsService:
 
     def __init__(self):
         self.model: Optional[Navec] = None
+        self.embeddings_matrix: Optional[np.ndarray] = None  # Кэшированная матрица эмбеддингов
+        self.words_list: Optional[List[str]] = None  # Список слов в том же порядке что и матрица
 
     def load_model(self):
         """Загрузка модели Navec"""
@@ -33,9 +35,26 @@ class EmbeddingsService:
 
             self.model = Navec.load(NAVEC_MODEL_NAME)
             logger.info("Модель Navec успешно загружена")
+
+            # Создаем кэшированную матрицу эмбеддингов для быстрого поиска
+            self._build_embeddings_matrix()
         except Exception as e:
             logger.error(f"Ошибка при загрузке модели Navec: {e}")
             raise
+
+    def _build_embeddings_matrix(self):
+        """Построение матрицы эмбеддингов для векторизованных операций"""
+        logger.info("Создание матрицы эмбеддингов для ускорения поиска...")
+
+        # Создаем список слов и матрицу эмбеддингов
+        self.words_list = list(self.model.vocab.words)
+        embeddings = np.array([self.model[word] for word in self.words_list])
+
+        # Предварительная нормализация для косинусного сходства
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        self.embeddings_matrix = embeddings / norms
+
+        logger.info(f"Матрица готова: {len(self.words_list)} слов, размер {self.embeddings_matrix.shape}")
 
     def _download_model(self):
         """Скачивание модели Navec"""
@@ -77,7 +96,7 @@ class EmbeddingsService:
         similarity_threshold: float = 0.0
     ) -> List[Tuple[str, float]]:
         """
-        Поиск семантически близких слов
+        Поиск семантически близких слов (векторизованная версия)
 
         Args:
             word: Исходное слово
@@ -92,7 +111,7 @@ class EmbeddingsService:
         Raises:
             ValueError: Если слово не найдено в словаре
         """
-        if self.model is None:
+        if self.model is None or self.embeddings_matrix is None:
             raise RuntimeError("Модель не загружена")
 
         # Режим случайных слов
@@ -104,26 +123,48 @@ class EmbeddingsService:
         if word_embedding is None:
             raise ValueError(f"Слово '{word}' не найдено в словаре эмбеддингов")
 
-        # Вычисляем косинусное сходство со всеми словами
-        similarities = []
+        # Нормализуем вектор запроса
+        word_norm = word_embedding / np.linalg.norm(word_embedding)
+
+        # ВЕКТОРИЗОВАННОЕ вычисление косинусного сходства со всеми словами
+        # Матричное умножение: (500K x 300) @ (300 x 1) = (500K x 1)
+        similarities = np.dot(self.embeddings_matrix, word_norm)
+
+        # Находим индекс исходного слова для исключения
         word_lower = word.lower()
+        try:
+            word_idx = self.words_list.index(word_lower)
+            similarities[word_idx] = -1  # Исключаем само слово
+        except ValueError:
+            pass  # Слово не в списке, ничего не делаем
 
-        for vocab_word in self.model.vocab.words:
-            if vocab_word == word_lower:
-                continue
+        # Исключаем технические токены
+        for tech_token in ['<pad>', '<unk>', '<s>', '</s>']:
+            try:
+                tech_idx = self.words_list.index(tech_token)
+                similarities[tech_idx] = -1
+            except ValueError:
+                pass
 
-            vocab_embedding = self.model[vocab_word]
+        # Получаем top-k индексов с учетом stride и фильтрации
+        # Берем больше кандидатов для применения фильтров
+        candidate_count = min(count * 20, len(similarities))
 
-            # Косинусное сходство
-            similarity = self._cosine_similarity(word_embedding, vocab_embedding)
-            similarities.append((vocab_word, similarity))
+        # Частичная сортировка (быстрее полной) - находим top-k
+        top_indices = np.argpartition(similarities, -candidate_count)[-candidate_count:]
 
-        # Сортируем по убыванию сходства
-        similarities.sort(key=lambda x: x[1], reverse=True)
+        # Сортируем только top-k элементов
+        top_indices = top_indices[np.argsort(similarities[top_indices])][::-1]
+
+        # Формируем список кандидатов
+        candidates = [
+            (self.words_list[idx], float(similarities[idx]))
+            for idx in top_indices
+        ]
 
         # Применяем stride и фильтрацию похожих слов
         result = self._apply_stride_and_filter(
-            similarities,
+            candidates,
             count,
             stride,
             similarity_threshold
