@@ -6,7 +6,8 @@ from typing import Optional
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.embeddings import embeddings_service
@@ -86,6 +87,15 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Монтирование статической директории
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/")
+async def read_index():
+    return FileResponse('static/index.html')
+
 
 
 @app.get("/health")

@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Копирование кода приложения
 COPY app/ ./app/
+COPY static/ ./static/
 
 # Открытие порта
 EXPOSE 8080
