@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "word-morph": {
+      "command": "docker",
+      "args": [
+        "exec",
+        "-i",
+        "word-morph-mcp",
+        "python",
+        "mcp_server.py"
+      ],
+      "env": {}
+    }
+  }
+}

@@ -1,0 +1,31 @@
+FROM python:3.10-slim
+
+# Установка curl для healthcheck
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Установка рабочей директории
+WORKDIR /app
+
+# Копирование файлов зависимостей
+COPY requirements-mcp.txt .
+
+# Установка зависимостей
+RUN pip install --no-cache-dir -r requirements-mcp.txt
+
+# Копирование MCP серверов (stdio и HTTP версии)
+COPY mcp_server.py .
+COPY mcp_server_http.py .
+
+# Сделать MCP серверы исполняемыми
+RUN chmod +x mcp_server.py mcp_server_http.py
+
+# Переменные окружения
+ENV WORD_MORPH_API_URL=http://word-morph-api:8080
+ENV MCP_HTTP_PORT=8082
+
+# Открытие порта для HTTP
+EXPOSE 8082
+
+# Команда запуска MCP HTTP сервера (для n8n и других HTTP клиентов)
+# Для stdio режима используйте: CMD ["python", "mcp_server.py"]
+CMD ["python", "mcp_server_http.py"]
