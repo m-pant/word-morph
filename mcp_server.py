@@ -56,6 +56,18 @@ Examples:
                         "maximum": 100,
                         "default": 10
                     },
+                    "phrase_length": {
+                        "type": "integer",
+                        "description": "Length of phrases to generate (1-3 words)",
+                        "minimum": 1,
+                        "maximum": 3,
+                        "default": 1
+                    },
+                    "age": {
+                        "type": "integer",
+                        "description": "Target age for vocabulary filtering (e.g., 7, 12, 16)",
+                        "minimum": 0
+                    },
                     "pos_filter": {
                         "type": "string",
                         "description": """Filter by part of speech. Options:
@@ -109,6 +121,11 @@ Examples:
                         "description": "Number of random letters to skip/remove from each word",
                         "minimum": 0,
                         "default": 0
+                    },
+                    "global_skip": {
+                        "type": "boolean",
+                        "description": "Apply skip_letters globally to the entire phrase instead of per-word",
+                        "default": False
                     },
                     "show_skipped": {
                         "type": "boolean",
@@ -186,12 +203,19 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 details.append(f"Similarity threshold: {query_info['similarity_threshold']}")
             if query_info.get('random_mode'):
                 details.append("Random mode")
+            if query_info.get('phrase_length', 1) > 1:
+                details.append(f"Phrase length: {query_info['phrase_length']}")
+            if query_info.get('age'):
+                details.append(f"Age filter: {query_info['age']}")
 
             transformations = query_info.get('transformations', {})
             if transformations.get('shuffle_letters'):
                 details.append("Letters shuffled")
             if transformations.get('skip_letters', 0) > 0:
-                details.append(f"Skip {transformations['skip_letters']} letters")
+                skip_desc = f"Skip {transformations['skip_letters']} letters"
+                if transformations.get('global_skip'):
+                    skip_desc += " (Global)"
+                details.append(skip_desc)
             if transformations.get('add_errors'):
                 details.append("Errors added")
 
