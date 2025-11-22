@@ -11,8 +11,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.embeddings import embeddings_service
-from app.transformations import apply_transformations
-from app.utils import validate_parameters, filter_words_by_pos, normalize_word
+from app.transformations import apply_transformations, apply_global_skip
+from app.utils import validate_parameters, filter_words_by_pos, normalize_word, is_word_appropriate_for_age
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ class TransformationsInfo(BaseModel):
     letter_type: str = Field(default='all')
     preserve_first: bool = Field(default=False)
     preserve_last: bool = Field(default=False)
+    global_skip: bool = Field(default=False)
 
 
 class QueryInfo(BaseModel):
@@ -38,6 +39,8 @@ class QueryInfo(BaseModel):
     similarity_threshold: float = Field(default=0.0)
     pos_filter: Optional[str] = Field(default=None)
     normalize: bool = Field(default=False)
+    phrase_length: int = Field(default=1)
+    age: Optional[int] = Field(default=None)
     transformations: TransformationsInfo
 
 
@@ -120,7 +123,10 @@ async def get_similar_words(
     add_errors: bool = Query(False, description="Добавлять случайные ошибки в слова"),
     letter_type: str = Query('all', description="Тип букв: all, vowels, consonants"),
     preserve_first: bool = Query(False, description="Не трогать первую букву"),
-    preserve_last: bool = Query(False, description="Не трогать последнюю букву")
+    preserve_last: bool = Query(False, description="Не трогать последнюю букву"),
+    phrase_length: int = Query(1, ge=1, le=3, description="Длина словосочетания (1-3 слова)"),
+    age: Optional[int] = Query(None, ge=0, description="Возраст пользователя для фильтрации (лет)"),
+    global_skip: bool = Query(False, description="Применять пропуск букв глобально ко всей фразе")
 ):
     """
     Получение списка семантически близких слов с применением трансформаций
@@ -141,6 +147,9 @@ async def get_similar_words(
         letter_type: Тип букв для трансформаций (all/vowels/consonants)
         preserve_first: Не трогать первую букву
         preserve_last: Не трогать последнюю букву
+        phrase_length: Длина словосочетания (1-3 слова)
+        age: Возраст пользователя для фильтрации
+        global_skip: Применять пропуск букв глобально ко всей фразе
 
     Returns:
         JSON с результатами поиска
@@ -191,6 +200,55 @@ async def get_similar_words(
             # Ограничиваем до нужного количества после фильтрации
             similar_words = similar_words[:validated['count']]
 
+        # Фильтрация по возрасту
+        if age is not None:
+            similar_words = [w for w in similar_words if is_word_appropriate_for_age(w, age)]
+            # Если после фильтрации слов стало меньше count, это нормально, но можно было бы добрать.
+            # Пока оставим как есть.
+            
+        # --- ЛОГИКА СЛОВОСОЧЕТАНИЙ ---
+        if phrase_length > 1:
+            phrases = []
+            # Используем найденные слова как "ядра" (существительные)
+            # И ищем к ним зависимые слова (прилагательные)
+            
+            for head_word in similar_words:
+                if len(phrases) >= validated['count']:
+                    break
+                    
+                # Ищем совместимые прилагательные
+                adjectives = embeddings_service.find_compatible_words(
+                    head_word, 
+                    target_pos='adjective', 
+                    count=5,
+                    similarity_threshold=0.5
+                )
+                
+                # Фильтруем прилагательные по возрасту тоже
+                if age is not None:
+                    adjectives = [w for w in adjectives if is_word_appropriate_for_age(w, age)]
+                
+                if adjectives:
+                    # Берем лучшее прилагательное
+                    adj1 = adjectives[0]
+                    
+                    if phrase_length == 3 and len(adjectives) > 1:
+                        # Для длины 3 берем два прилагательных
+                        adj2 = adjectives[1]
+                        phrase = f"{adj1} {adj2} {head_word}"
+                    else:
+                        # Для длины 2 или если не нашли второго прилагательного
+                        phrase = f"{adj1} {head_word}"
+                        
+                    phrases.append(phrase)
+                else:
+                    # Если не нашли пару, пропускаем или оставляем одно слово?
+                    # По ТЗ нужны словосочетания. Пропускаем.
+                    pass
+            
+            # Заменяем список слов на список фраз
+            similar_words = phrases
+
         # Сохраняем исходные слова перед трансформацией (если нужно)
         original_words = similar_words.copy() if return_source else None
 
@@ -205,6 +263,44 @@ async def get_similar_words(
             preserve_first=preserve_first,
             preserve_last=preserve_last
         )
+        
+        # Применяем глобальный пропуск букв (если включен)
+        if global_skip and skip_letters > 0:
+            # Если включен глобальный пропуск, то локальный skip_letters уже сработал (или нет, зависит от логики)
+            # Но по ТЗ: "поддрежка режима пропуска букв во всем словосочетании"
+            # Значит, мы должны применить его ПОВЕРХ или ВМЕСТО локального.
+            # Логичнее ВМЕСТО. Поэтому если global_skip=True, мы должны были передать skip_letters=0 в apply_transformations
+            pass # Реализовано ниже через переопределение
+            
+        if global_skip and skip_letters > 0:
+            # Переделываем трансформацию с нуля для глобального режима
+            # 1. Берем исходные (или перемешанные) слова
+            # 2. Собираем их во фразы
+            # 3. Применяем глобальный скип
+            
+            # Сначала применим все трансформации КРОМЕ skip_letters
+            base_transformed = apply_transformations(
+                words=similar_words,
+                shuffle_letters=shuffle_letters,
+                skip_letters=0, # Отключаем локальный пропуск
+                show_skipped=show_skipped,
+                add_errors=add_errors,
+                letter_type=letter_type,
+                preserve_first=preserve_first,
+                preserve_last=preserve_last
+            )
+            
+            # Теперь применяем глобальный пропуск к каждой фразе
+            final_words = []
+            for word in base_transformed:
+                # total_skips = skip_letters * количество слов (примерно)
+                # Или просто skip_letters как общее число на фразу?
+                # По ТЗ: "количество букв пропущенное в каждом слове" - это параметр.
+                # "режима пропуска букв во всем словосочетании" - это другой режим.
+                # Пусть global_skip означает, что skip_letters - это ОБЩЕЕ число пропусков на фразу.
+                final_words.append(apply_global_skip(word, skip_letters, show_skipped))
+            
+            transformed_words = final_words
 
         # Создаем пары исходных и трансформированных слов (если запрошено)
         word_pairs = None
@@ -224,6 +320,8 @@ async def get_similar_words(
                 similarity_threshold=validated['similarity_threshold'],
                 pos_filter=pos_filter,
                 normalize=normalize,
+                phrase_length=phrase_length,
+                age=age,
                 transformations=TransformationsInfo(
                     shuffle_letters=shuffle_letters,
                     skip_letters=skip_letters,
@@ -231,7 +329,8 @@ async def get_similar_words(
                     add_errors=add_errors,
                     letter_type=letter_type,
                     preserve_first=preserve_first,
-                    preserve_last=preserve_last
+                    preserve_last=preserve_last,
+                    global_skip=global_skip
                 )
             ),
             results=transformed_words,

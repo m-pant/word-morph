@@ -1,7 +1,9 @@
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-navec==0.10.0
-numpy==1.24.3
+navec>=0.10.0
+numpy>=1.20.0
+wordfreq>=3.0
+requests>=2.25.0
 pydantic==2.5.0
 pymorphy2==0.9.1
 pymorphy2-dicts-ru==2.4.417127.4579844

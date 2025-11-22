@@ -44,6 +44,22 @@ services:
       retries: 3
       start_period: 10s
 
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: word-morph-tests
+    depends_on:
+      word-morph:
+        condition: service_healthy
+    environment:
+      - WORD_MORPH_API_URL=http://word-morph:8080
+    volumes:
+      - ./verify_changes.py:/app/verify_changes.py
+    command: ["python", "verify_changes.py"]
+    networks:
+      - word-morph-network
+
 volumes:
   navec-cache:
     driver: local

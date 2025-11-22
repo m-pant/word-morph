@@ -7,6 +7,7 @@ import random
 from typing import List, Optional, Tuple
 import numpy as np
 from navec import Navec
+from app.utils import get_word_pos, POS_MAPPING, POS_GROUPS
 
 logger = logging.getLogger(__name__)
 
@@ -314,6 +315,64 @@ class EmbeddingsService:
             return 0.0
 
         return float(dot_product / (norm1 * norm2))
+
+    def find_compatible_words(
+        self,
+        head_word: str,
+        target_pos: str,
+        count: int = 5,
+        similarity_threshold: float = 0.3
+    ) -> List[str]:
+        """
+        Поиск слов, совместимых с главным словом (для словосочетаний)
+        
+        Args:
+            head_word: Главное слово (например, существительное)
+            target_pos: Целевая часть речи зависимого слова (например, adjective)
+            count: Количество слов
+            similarity_threshold: Минимальный порог косинусного сходства
+            
+        Returns:
+            Список совместимых слов
+        """
+        if self.model is None:
+            raise RuntimeError("Модель не загружена")
+            
+        # Получаем похожие слова (кандидаты)
+        # Берем больше, чтобы было из чего фильтровать
+        candidates = self.find_similar_words(
+            head_word, 
+            count=count * 10, 
+            similarity_threshold=0.0 # Не фильтруем по текстовой схожести здесь
+        )
+        
+        compatible_words = []
+        
+        # Определяем целевые POS коды
+        target_pos_codes = []
+        if target_pos in POS_GROUPS:
+            target_pos_codes = POS_GROUPS[target_pos]
+        elif target_pos in POS_MAPPING:
+            target_pos_codes = [POS_MAPPING[target_pos]]
+        else:
+            target_pos_codes = [target_pos.upper()]
+            
+        for word, score in candidates:
+            if len(compatible_words) >= count:
+                break
+                
+            # Фильтр по семантической близости (косинусное сходство)
+            # Для словосочетаний нам нужны слова, которые часто встречаются вместе,
+            # а в векторном пространстве они обычно имеют высокую близость
+            if score < similarity_threshold:
+                continue
+                
+            # Фильтр по части речи
+            word_pos = get_word_pos(word)
+            if word_pos in target_pos_codes:
+                compatible_words.append(word)
+                
+        return compatible_words
 
 
 # Глобальный экземпляр сервиса

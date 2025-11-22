@@ -98,18 +98,20 @@ class WordTransformer:
         if len(indices) < 2:
             return word
 
-        # Получаем буквы для перестановки
-        letters_to_shuffle = [word_list[i] for i in indices]
+        # Если есть пробелы, обрабатываем каждое слово отдельно
+        if ' ' in word:
+            parts = word.split(' ')
+            shuffled_parts = [self.shuffle_letters(part) for part in parts]
+            return ' '.join(shuffled_parts)
 
         # Перемешиваем буквы
-        shuffled_letters = letters_to_shuffle.copy()
-        random.shuffle(shuffled_letters)
+        chars_to_shuffle = [word_list[i] for i in indices]
+        random.shuffle(chars_to_shuffle)
 
-        # Заменяем буквы в слове
-        for idx, letter_pos in enumerate(indices):
-            word_list[letter_pos] = shuffled_letters[idx]
+        for i, char in zip(indices, chars_to_shuffle):
+            word_list[i] = char
 
-        return ''.join(word_list)
+        return "".join(word_list)
 
     def skip_letters(self, word: str, skip_count: int, show_skipped: bool = False) -> str:
         """
@@ -125,6 +127,12 @@ class WordTransformer:
         """
         if len(word) < 3 or skip_count <= 0:
             return word
+
+        # Если есть пробелы, обрабатываем каждое слово отдельно
+        if ' ' in word:
+            parts = word.split(' ')
+            skipped_parts = [self.skip_letters(part, skip_count, show_skipped) for part in parts]
+            return ' '.join(skipped_parts)
 
         indices = self._get_transformable_indices(word)
 
@@ -200,6 +208,45 @@ class WordTransformer:
             word_list[pos] = replacement
 
         return ''.join(word_list)
+
+
+def apply_global_skip(phrase: str, total_skips: int, show_skipped: bool = False) -> str:
+    """
+    Применение глобального пропуска букв к фразе
+    
+    Args:
+        phrase: Исходная фраза (слова разделены пробелами)
+        total_skips: Общее количество букв для пропуска во всей фразе
+        show_skipped: Показывать пропущенные буквы как '_'
+        
+    Returns:
+        Фраза с пропущенными буквами
+    """
+    if total_skips <= 0:
+        return phrase
+        
+    # Находим все индексы букв, которые можно пропустить (игнорируем пробелы)
+    valid_indices = [i for i, char in enumerate(phrase) if char.strip()]
+    
+    if not valid_indices:
+        return phrase
+        
+    # Определяем реальное количество пропусков
+    actual_skips = min(total_skips, len(valid_indices))
+    
+    # Выбираем случайные индексы для пропуска
+    indices_to_skip = set(random.sample(valid_indices, actual_skips))
+    
+    # Формируем результат
+    result = []
+    for i, char in enumerate(phrase):
+        if i in indices_to_skip:
+            if show_skipped:
+                result.append('_')
+        else:
+            result.append(char)
+            
+    return ''.join(result)
 
 
 def apply_transformations(

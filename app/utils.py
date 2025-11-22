@@ -4,6 +4,7 @@
 import logging
 from typing import Dict, Any, List, Optional
 import pymorphy2
+from wordfreq import zipf_frequency
 
 # Настройка логирования
 logging.basicConfig(
@@ -108,6 +109,51 @@ def filter_words_by_pos(words: List[str], pos_filter: Optional[str]) -> List[str
             filtered.append(word)
 
     return filtered
+
+
+def get_word_frequency(word: str) -> float:
+    """
+    Получение частотности слова по шкале Zipf (0-8)
+    
+    Args:
+        word: Слово для проверки
+        
+    Returns:
+        Частотность (float)
+    """
+    return zipf_frequency(word, 'ru')
+
+
+def is_word_appropriate_for_age(word: str, age: Optional[int]) -> bool:
+    """
+    Проверка слова на соответствие возрасту на основе частотности
+    
+    Args:
+        word: Слово для проверки
+        age: Возраст пользователя (None = без ограничений)
+        
+    Returns:
+        True, если слово подходит
+    """
+    if age is None:
+        return True
+        
+    freq = get_word_frequency(word)
+    
+    # Логика фильтрации по возрасту
+    if age < 7:
+        # Для дошкольников: только очень частые слова
+        return freq >= 5.0
+    elif age < 12:
+        # Для младших школьников: частые и средние
+        return freq >= 4.0
+    elif age < 16:
+        # Для подростков: допускаем более редкие
+        return freq >= 3.0
+    else:
+        # Для взрослых и старших подростков: почти все слова
+        # Отсекаем только совсем редкий мусор/опечатки
+        return freq >= 1.5
 
 
 def validate_parameters(

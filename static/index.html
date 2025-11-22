@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,11 +11,13 @@
             padding-top: 2rem;
             padding-bottom: 2rem;
         }
+
         .form-check-label {
             margin-left: 0.5rem;
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1 class="mb-4">Word Morph API</h1>
@@ -24,23 +27,42 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label for="word" class="form-label">Слово</label>
-                            <input type="text" class="form-control" id="word" name="word" required data-bs-toggle="tooltip" title="Исходное слово для поиска">
+                            <input type="text" class="form-control" id="word" name="word" required
+                                data-bs-toggle="tooltip" title="Исходное слово для поиска">
                         </div>
                         <div class="col-md-6">
                             <label for="count" class="form-label">Количество</label>
-                            <input type="number" class="form-control" id="count" name="count" value="10" min="1" max="100" data-bs-toggle="tooltip" title="Количество возвращаемых слов (1-100)">
+                            <input type="number" class="form-control" id="count" name="count" value="10" min="1"
+                                max="100" data-bs-toggle="tooltip" title="Количество возвращаемых слов (1-100)">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="phrase_length" class="form-label">Длина фразы</label>
+                            <input type="number" class="form-control" id="phrase_length" name="phrase_length" value="1"
+                                min="1" max="3" data-bs-toggle="tooltip" title="Длина словосочетания (1-3 слова)">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="age" class="form-label">Возраст (фильтр)</label>
+                            <input type="number" class="form-control" id="age" name="age" min="0" max="100"
+                                placeholder="Любой" data-bs-toggle="tooltip"
+                                title="Возраст пользователя для фильтрации слов">
                         </div>
                         <div class="col-md-6">
                             <label for="stride" class="form-label">Шаг выборки</label>
-                            <input type="number" class="form-control" id="stride" name="stride" value="0" min="0" data-bs-toggle="tooltip" title="Шаг выборки слов (0=последовательно, 1=через одно, 2=через два)">
+                            <input type="number" class="form-control" id="stride" name="stride" value="0" min="0"
+                                data-bs-toggle="tooltip"
+                                title="Шаг выборки слов (0=последовательно, 1=через одно, 2=через два)">
                         </div>
                         <div class="col-md-6">
                             <label for="similarity_threshold" class="form-label">Порог схожести</label>
-                            <input type="number" class="form-control" id="similarity_threshold" name="similarity_threshold" value="0.0" min="0.0" max="1.0" step="0.1" data-bs-toggle="tooltip" title="Порог текстовой схожести для фильтрации похожих слов (0.0-1.0)">
+                            <input type="number" class="form-control" id="similarity_threshold"
+                                name="similarity_threshold" value="0.0" min="0.0" max="1.0" step="0.1"
+                                data-bs-toggle="tooltip"
+                                title="Порог текстовой схожести для фильтрации похожих слов (0.0-1.0)">
                         </div>
                         <div class="col-md-6">
                             <label for="pos_filter" class="form-label">Часть речи</label>
-                            <select class="form-select" id="pos_filter" name="pos_filter" data-bs-toggle="tooltip" title="Фильтр по части речи (noun, verb, adjective и др.)">
+                            <select class="form-select" id="pos_filter" name="pos_filter" data-bs-toggle="tooltip"
+                                title="Фильтр по части речи (noun, verb, adjective и др.)">
                                 <option value="">Любая</option>
                                 <option value="noun">Существительное</option>
                                 <option value="verb">Глагол</option>
@@ -50,7 +72,8 @@
                         </div>
                         <div class="col-md-6">
                             <label for="letter_type" class="form-label">Тип букв для трансформации</label>
-                            <select class="form-select" id="letter_type" name="letter_type" data-bs-toggle="tooltip" title="Тип букв: all, vowels, consonants">
+                            <select class="form-select" id="letter_type" name="letter_type" data-bs-toggle="tooltip"
+                                title="Тип букв: all, vowels, consonants">
                                 <option value="all">Все</option>
                                 <option value="vowels">Гласные</option>
                                 <option value="consonants">Согласные</option>
@@ -58,40 +81,57 @@
                         </div>
                         <div class="col-md-6">
                             <label for="skip_letters" class="form-label">Пропустить букв</label>
-                            <input type="number" class="form-control" id="skip_letters" name="skip_letters" value="0" min="0" data-bs-toggle="tooltip" title="Количество букв для пропуска">
+                            <input type="number" class="form-control" id="skip_letters" name="skip_letters" value="0"
+                                min="0" data-bs-toggle="tooltip" title="Количество букв для пропуска">
                         </div>
                         <div class="col-12">
                             <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="random_mode" name="random_mode" data-bs-toggle="tooltip" title="Вернуть случайные слова вместо семантически близких">
+                                <input class="form-check-input" type="checkbox" id="random_mode" name="random_mode"
+                                    data-bs-toggle="tooltip"
+                                    title="Вернуть случайные слова вместо семантически близких">
                                 <label class="form-check-label" for="random_mode">Случайные слова</label>
                             </div>
                             <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="normalize" name="normalize" data-bs-toggle="tooltip" title="Привести слова к начальной форме (именительный падеж ед.ч.)">
+                                <input class="form-check-input" type="checkbox" id="normalize" name="normalize"
+                                    data-bs-toggle="tooltip"
+                                    title="Привести слова к начальной форме (именительный падеж ед.ч.)">
                                 <label class="form-check-label" for="normalize">Нормализовать</label>
                             </div>
                             <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="return_source" name="return_source" data-bs-toggle="tooltip" title="Возвращать исходные слова вместе с трансформированными">
+                                <input class="form-check-input" type="checkbox" id="return_source" name="return_source"
+                                    data-bs-toggle="tooltip"
+                                    title="Возвращать исходные слова вместе с трансформированными">
                                 <label class="form-check-label" for="return_source">Вернуть исходные слова</label>
                             </div>
                             <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="shuffle_letters" name="shuffle_letters" data-bs-toggle="tooltip" title="Перестановка букв в словах">
+                                <input class="form-check-input" type="checkbox" id="shuffle_letters"
+                                    name="shuffle_letters" data-bs-toggle="tooltip" title="Перестановка букв в словах">
                                 <label class="form-check-label" for="shuffle_letters">Перемешать буквы</label>
                             </div>
                             <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="show_skipped" name="show_skipped" data-bs-toggle="tooltip" title="Показывать пропущенные буквы как _">
+                                <input class="form-check-input" type="checkbox" id="show_skipped" name="show_skipped"
+                                    data-bs-toggle="tooltip" title="Показывать пропущенные буквы как _">
                                 <label class="form-check-label" for="show_skipped">Показывать пропущенные как _</label>
                             </div>
                             <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="add_errors" name="add_errors" data-bs-toggle="tooltip" title="Добавлять случайные ошибки в слова">
+                                <input class="form-check-input" type="checkbox" id="add_errors" name="add_errors"
+                                    data-bs-toggle="tooltip" title="Добавлять случайные ошибки в слова">
                                 <label class="form-check-label" for="add_errors">Добавить ошибки</label>
                             </div>
                             <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="preserve_first" name="preserve_first" data-bs-toggle="tooltip" title="Не трогать первую букву">
+                                <input class="form-check-input" type="checkbox" id="preserve_first"
+                                    name="preserve_first" data-bs-toggle="tooltip" title="Не трогать первую букву">
                                 <label class="form-check-label" for="preserve_first">Сохранить первую букву</label>
                             </div>
                             <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="preserve_last" name="preserve_last" data-bs-toggle="tooltip" title="Не трогать последнюю букву">
+                                <input class="form-check-input" type="checkbox" id="preserve_last" name="preserve_last"
+                                    data-bs-toggle="tooltip" title="Не трогать последнюю букву">
                                 <label class="form-check-label" for="preserve_last">Сохранить последнюю букву</label>
+                            </div>
+                            <div class="form-check form-switch" id="global_skip_container" style="display: none;">
+                                <input class="form-check-input" type="checkbox" id="global_skip" name="global_skip"
+                                    data-bs-toggle="tooltip" title="Применять пропуск букв глобально ко всей фразе">
+                                <label class="form-check-label" for="global_skip">Глобальный пропуск букв</label>
                             </div>
                         </div>
                     </div>
@@ -117,10 +157,30 @@
             return new bootstrap.Tooltip(tooltipTriggerEl)
         })
 
+        // Show/hide global skip based on skip_letters
+        const skipLettersInput = document.getElementById('skip_letters');
+        const globalSkipContainer = document.getElementById('global_skip_container');
+
+        skipLettersInput.addEventListener('input', function () {
+            if (this.value > 0) {
+                globalSkipContainer.style.display = 'block';
+            } else {
+                globalSkipContainer.style.display = 'none';
+                document.getElementById('global_skip').checked = false;
+            }
+        });
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const originalBtnText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Загрузка...';
+
             resultsDiv.innerHTML = '';
             errorDiv.style.display = 'none';
+
+            console.log('Form submitted');
 
             const formData = new FormData(form);
             const params = new URLSearchParams();
@@ -131,7 +191,7 @@
             }
 
             // Handle checkboxes
-            ['random_mode', 'normalize', 'return_source', 'shuffle_letters', 'show_skipped', 'add_errors', 'preserve_first', 'preserve_last'].forEach(id => {
+            ['random_mode', 'normalize', 'return_source', 'shuffle_letters', 'show_skipped', 'add_errors', 'preserve_first', 'preserve_last', 'global_skip'].forEach(id => {
                 const checkbox = document.getElementById(id);
                 if (checkbox.checked) {
                     params.set(id, 'true');
@@ -140,8 +200,12 @@
 
 
             try {
-                const response = await fetch(`/api/words?${params.toString()}`);
+                const url = `/api/words?${params.toString()}`;
+                console.log('Fetching:', url);
+                const response = await fetch(url);
+                console.log('Response status:', response.status);
                 const data = await response.json();
+                console.log('Response data:', data);
 
                 if (response.ok) {
                     if (data.results && data.results.length > 0) {
@@ -165,10 +229,15 @@
                     errorDiv.style.display = 'block';
                 }
             } catch (error) {
-                errorDiv.textContent = 'Сетевая ошибка или сервер недоступен.';
+                console.error('Fetch error:', error);
+                errorDiv.textContent = 'Сетевая ошибка или сервер недоступен. Проверьте консоль.';
                 errorDiv.style.display = 'block';
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalBtnText;
             }
         });
     </script>
 </body>
+
 </html>
